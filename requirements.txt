@@ -1,0 +1,8 @@
+scrapling[fetchers]
+python-dotenv
+pandas
+streamlit
+plotly
+pdfplumber
+extra-streamlit-components
+loguru

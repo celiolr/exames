@@ -1,0 +1,16 @@
+[Config]
+# Limite máximo de exames mais recentes para download por paciente
+LIMIT_EXAM_DOWNLOAD = 2
+
+# Porcentagem de amostragem da auditoria (1.0 = 100% - recomendado para exames de saúde)
+AUDIT_SAMPLE_PERCENTAGE = 1.0
+
+[Laboratorios]
+# URLs de login dos portais de laboratórios suportados
+pretti = https://pretti.shiftcloud.com.br/shift/lis/pretti/elis/s01.iu.web.Login.cls?config=UNICO&sigla=
+
+[Pacientes]
+# Configure os pacientes no formato JSON dict (em uma única linha)
+# Substitua os valores abaixo pelas suas credenciais e laboratório correspondente
+# Parâmetro "role" pode ser "admin" (acesso a todos os pacientes) ou "user" (restrito aos próprios dados)
+paciente_exemplo_1 = {"nome": "Paciente Exemplo", "user": "P12345", "pass": "SenhaExemplo123", "lab": "pretti", "role": "admin"}

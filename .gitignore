@@ -1,0 +1,21 @@
+# Ambientes virtuais e dependências
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# Arquivos de credenciais sensíveis e dados clínicos dos pacientes (segurança)
+.env
+config.ini
+data/
+
+# Caches locais do Streamlit e Playwright
+.streamlit/
+.pytest_cache/
+.scrapling/
+.playwright/
+
+# Pasta temporária para relatórios e tarefas de desenvolvimento
+_temp/
+scratch/
