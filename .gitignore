@@ -5,10 +5,18 @@ env/
 __pycache__/
 *.pyc
 
-# Arquivos de credenciais sensíveis e dados clínicos dos pacientes (segurança)
+# Caches de credenciais sensíveis e dados clínicos dos pacientes (segurança)
 .env
 config.ini
-data/
+data/**
+!data/
+!data/exames/
+!data/exames/exame_references.csv
+!data/exames/auditoria/
+!data/exames/exames_md/
+!data/exames/output/
+!data/exames/results/
+!data/**/.gitkeep
 
 # Caches locais do Streamlit e Playwright
 .streamlit/
@@ -19,3 +27,5 @@ data/
 # Pasta temporária para relatórios e tarefas de desenvolvimento
 _temp/
 scratch/
+
+secret.key

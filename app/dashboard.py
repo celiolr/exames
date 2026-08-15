@@ -35,6 +35,11 @@ pd_st.markdown("""
         color: var(--text-color) !important;
         font-family: 'Outfit', 'Inter', sans-serif;
     }
+    div[data-testid="stSidebar"] h2 {
+        font-size: 1.0rem !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
     .stSidebar {
         background-color: var(--secondary-background-color) !important;
         border-right: 1px solid rgba(128, 128, 128, 0.2);
@@ -630,45 +635,20 @@ else:
         except Exception:
             tema_is_dark = True
 
-    # SIDEBAR - Filtros solicitados
-    pd_st.sidebar.header("🔍 Filtros de Busca")
-    
-    # Presets Section
-    pd_st.sidebar.subheader("🎯 Grupos de Exames")
+    # SIDEBAR - Filtros e Grupos de Exames
+    pd_st.sidebar.header("🔍 Filtros & Grupos de Exames")
     presets = {
         "Controle de Diabetes": ["Glicose em Jejum", "Hemoglobina Glicada (HbA1c)", "Glicemia Média Estimada"],
+        "Colesterol": ["Colesterol Total", "Colesterol HDL", "Colesterol Não-HDL"],
         "Função Renal": ["Ureia", "Creatinina Sérica", "Ácido Úrico"],
-        "Função Hepática": ["TGO (AST)", "TGP (ALT)", "Gama Gt", "Fosfatase Alcalina"],
+        "Função Hepática": ["TGO (AST)", "TGP (ALT)", "Gama GT", "Fosfatase Alcalina"],
         "Perfil Lipídico": ["Colesterol Total", "Colesterol HDL", "Triglicerídeos"],
         "Hemograma Completo": "hemograma_completo",
         "Hormônios & Tireoide": ["TSH Ultra Sensível", "T4 Livre", "25-Hidroxivitamina D"],
         "PSA (Saúde Masculina)": ["Psa Total Ultra Sensível"]
     }
     
-    all_exams = sorted(df['Exame/Componente'].dropna().unique().tolist())
-    
-    # Inicializa estado selecionado se necessário
-    if "selected_exames_multiselect" not in pd_st.session_state:
-        # Default presets (Controle de Diabetes completo)
-        default_preset = ["Glicose em Jejum", "Hemoglobina Glicada (HbA1c)", "Glicemia Média Estimada"]
-        pd_st.session_state["selected_exames_multiselect"] = [e for e in default_preset if e in all_exams]
-        if not pd_st.session_state["selected_exames_multiselect"] and all_exams:
-            pd_st.session_state["selected_exames_multiselect"] = [all_exams[0]]
-    
-    pd_st.session_state["selected_exames"] = pd_st.session_state["selected_exames_multiselect"]
-            
-    # Renderizar botões de preset
-    for p_name in presets.keys():
-        if pd_st.sidebar.button(p_name, width="stretch"):
-            if p_name == "Hemograma Completo":
-                resolved = [e for e in ["Hemograma - Hemoglobina", "Hemograma - Hematocrito", "Leucocitos", "Plaquetas"] if e in all_exams]
-            else:
-                resolved = [e for e in presets[p_name] if e in all_exams]
-            pd_st.session_state["selected_exames"] = resolved
-            pd_st.session_state["selected_exames_multiselect"] = resolved
-            pd_st.rerun()
-
-    # 1. Filtro Paciente
+    # 1. Filtro Paciente (Renderizado no topo)
     pacientes_lista = sorted(df['Paciente'].dropna().unique().tolist())
     if is_admin:
         if pacientes_lista:
@@ -698,30 +678,60 @@ else:
     if selected_paciente != "Todos":
         df_paciente = df_paciente[df_paciente['Paciente'] == selected_paciente]
 
-    # Para evitar que seleções de um paciente antigo fiquem presas ao mudar de paciente,
-    # verificamos se o paciente mudou
+    # Para evitar que seleções de um paciente antigo fiquem presas ao mudar de paciente
     if "last_selected_paciente" not in pd_st.session_state:
         pd_st.session_state["last_selected_paciente"] = selected_paciente
-        
+
+    exames_opts = sorted(df_paciente['Exame/Componente'].dropna().unique().tolist())
+
     if pd_st.session_state["last_selected_paciente"] != selected_paciente:
-        # Paciente mudou! Vamos limpar/reiniciar a seleção de exames
+        # Paciente mudou! Vamos tentar manter a seleção de exames ativa para permitir comparação
         pd_st.session_state["last_selected_paciente"] = selected_paciente
-        # Define padrões para o novo paciente (Controle de Diabetes completo)
-        exames_opts_novo = sorted(df_paciente['Exame/Componente'].dropna().unique().tolist())
-        default_preset = ["Glicose em Jejum", "Hemoglobina Glicada (HbA1c)", "Glicemia Média Estimada"]
-        valid_selections = [e for e in default_preset if e in exames_opts_novo]
-        if not valid_selections and exames_opts_novo:
-            valid_selections = [exames_opts_novo[0]]
+        prev_selections = pd_st.session_state.get("selected_exames_multiselect", [])
+        
+        # Filtra para manter apenas os exames selecionados que o novo paciente realmente possui
+        valid_selections = [e for e in prev_selections if e in exames_opts]
+        
+        # Se nenhuma seleção anterior for compatível com o novo paciente, aplica o padrão
+        if not valid_selections:
+            default_preset = ["Glicose em Jejum", "Hemoglobina Glicada (HbA1c)", "Glicemia Média Estimada"]
+            valid_selections = [e for e in default_preset if e in exames_opts]
+            if not valid_selections and exames_opts:
+                valid_selections = [exames_opts[0]]
+                
         pd_st.session_state["selected_exames_multiselect"] = valid_selections
         pd_st.session_state["selected_exames"] = valid_selections
         pd_st.rerun()
+
+    # Inicializa estado selecionado de forma persistente com flag de inicialização
+    if "initialized_filters" not in pd_st.session_state:
+        default_preset = ["Glicose em Jejum", "Hemoglobina Glicada (HbA1c)", "Glicemia Média Estimada"]
+        pd_st.session_state["selected_exames_multiselect"] = [e for e in default_preset if e in exames_opts]
+        if not pd_st.session_state["selected_exames_multiselect"] and exames_opts:
+            pd_st.session_state["selected_exames_multiselect"] = [exames_opts[0]]
+        pd_st.session_state["initialized_filters"] = True
+    elif "selected_exames_multiselect" not in pd_st.session_state:
+        # Garante fallback se limpo completamente pelo Streamlit
+        pd_st.session_state["selected_exames_multiselect"] = []
     
+    pd_st.session_state["selected_exames"] = pd_st.session_state["selected_exames_multiselect"]
+            
+    # Renderizar botões de preset filtrados pelos exames reais do paciente
+    for p_name in presets.keys():
+        if pd_st.sidebar.button(p_name, width="stretch"):
+            if p_name == "Hemograma Completo":
+                resolved = [e for e in ["Hemograma - Hemoglobina", "Hemograma - Hematocrito", "Leucocitos", "Plaquetas"] if e in exames_opts]
+            else:
+                resolved = [e for e in presets[p_name] if e in exames_opts]
+            pd_st.session_state["selected_exames"] = resolved
+            pd_st.session_state["selected_exames_multiselect"] = resolved
+            pd_st.rerun()
+
     # 2. Filtro Médico (baseado no paciente selecionado)
     medicos_opts = ["Todos"] + sorted(df_paciente['Médico'].dropna().unique().tolist())
     selected_medico = pd_st.sidebar.selectbox("Médico", medicos_opts)
     
     # 5. Filtro Exame / Componente (baseado no paciente selecionado) - reposicionado para logo após Médico
-    exames_opts = sorted(df_paciente['Exame/Componente'].dropna().unique().tolist())
     selected_exames = pd_st.sidebar.multiselect(
         "Exame / Componente", 
         exames_opts, 
@@ -793,6 +803,128 @@ else:
                             idx_exame = exames_selecionados.index(date_group['Exame/Componente'].iloc[0]) if date_group['Exame/Componente'].iloc[0] in exames_selecionados else 0
                             df_plot.loc[date_group.index[0], 'Posicao Texto'] = posicoes_texto[idx_exame % len(posicoes_texto)]
                     
+                    # Função auxiliar para adicionar as linhas de referência de um exame específico
+                    def add_reference_traces(exame_nome, group, yaxis=None):
+                        ref_inicial_visible = True if len(exames_selecionados) == 1 else False
+                        ref_csv_path = "data/exames/exame_references.csv"
+                        if not os.path.exists(ref_csv_path):
+                            return
+                        try:
+                            import csv
+                            from datetime import datetime
+                            # Coleta dados clínicos do paciente exibido na tela para carregar o VR correto
+                            p_sex = "Ambos"
+                            p_birth = None
+                            p_preg = False
+                            
+                            # Tenta carregar metadados do config correspondentes ao selected_paciente
+                            from app.data_extractor_reference import load_patient_metadata
+                            pat_meta = load_patient_metadata(selected_paciente)
+                            if pat_meta:
+                                p_sex = pat_meta.get("sexo", "Ambos")
+                                p_birth = pat_meta.get("data_nascimento")
+                                p_preg = pat_meta.get("gravidez", False)
+                            else:
+                                # Fallback para o usuário logado se não achar
+                                p_sex = user_data.get("sexo", "Ambos")
+                                p_birth = user_data.get("data_nascimento")
+                                p_preg = user_data.get("gravidez", False)
+                                
+                            p_age = None
+                            p_faixa = "Ambos"
+                            
+                            # Identifica a data mais recente do grupo para calcular idade
+                            if 'Data Formatada' in group.columns and not group['Data Formatada'].isna().all():
+                                idx_max = group['Data Formatada'].idxmax()
+                                last_coleta = group.loc[idx_max, 'Data Exame']
+                            else:
+                                last_coleta = group['Data Exame'].max()
+                                
+                            if p_birth and last_coleta:
+                                birth_d = datetime.strptime(p_birth, "%d/%m/%d%y" if len(p_birth.split('/')[-1]) == 2 else "%d/%m/%Y")
+                                exam_d = datetime.strptime(last_coleta, "%d/%m/%Y")
+                                p_age = exam_d.year - birth_d.year - ((exam_d.month, exam_d.day) < (birth_d.month, birth_d.day))
+                                p_faixa = "Adulto" if p_age > 20 else "Infantil"
+                                
+                            ref_text = ""
+                            with open(ref_csv_path, 'r', encoding='utf-8') as ref_f:
+                                ref_reader = csv.reader(ref_f)
+                                next(ref_reader, None)  # Pula header
+                                for ref_row in ref_reader:
+                                    if len(ref_row) >= 8:
+                                        exam_name, _, ref_c, ref_p, r_sex, r_faixa, r_preg, _ = ref_row
+                                        if exam_name.upper().strip() == exame_nome.upper().strip():
+                                            # Valida compatibilidade clínica
+                                            if r_sex and r_sex != "Ambos" and p_sex and r_sex.upper() != p_sex.upper():
+                                                continue
+                                            if r_faixa and r_faixa != "Ambos" and p_faixa and r_faixa.upper() != p_faixa.upper():
+                                                continue
+                                            if r_preg and r_preg.upper() != str(p_preg).upper():
+                                                continue
+                                            ref_text = ref_p if ref_p else ref_c
+                                            break
+                            
+                            if ref_text:
+                                # Tenta extrair padrões comuns de valores numéricos de referência
+                                # Substitui virgulas por pontos para facilitar
+                                ref_norm = ref_text.replace(',', '.')
+                                
+                                limit_min = None
+                                limit_max = None
+                                
+                                # Intervalo: "DE X A Y" ou "X A Y" ou "X - Y" ou "X E Y" ou "X ATE Y"
+                                match_range = re.search(r'(?:DE\s+)?([\d\.]+)\s*(?:A|ATE|-|E)\s+([\d\.]+)', ref_norm, re.IGNORECASE)
+                                # Superior: "SUPERIOR A X" ou "MAIOR QUE X" ou "SUPERIOR OU IGUAL A X" ou "MAIOR OU IGUAL A X"
+                                match_sup = re.search(r'(?:SUPERIOR|MAIOR)\s+(?:A|QUE|OU\s+IGUAL\s+A)?\s*([\d\.]+)', ref_norm, re.IGNORECASE)
+                                # Inferior: "INFERIOR A X" ou "MENOR QUE X" ou "ATE X" ou "INFERIOR OU IGUAL A X" ou "MENOR OU IGUAL A X"
+                                match_inf = re.search(r'(?:INFERIOR|MENOR|ATE)\s+(?:A|QUE|OU\s+IGUAL\s+A)?\s*([\d\.]+)', ref_norm, re.IGNORECASE)
+                                
+                                if match_range:
+                                    limit_min = float(match_range.group(1))
+                                    limit_max = float(match_range.group(2))
+                                elif match_inf:
+                                    limit_max = float(match_inf.group(1))
+                                elif match_sup:
+                                    limit_min = float(match_sup.group(1))
+                                    
+                                # Adiciona as linhas horizontais de referência
+                                if limit_min is not None or limit_max is not None:
+                                    x_vals = group['Data Formatada'].tolist()
+                                    if len(x_vals) >= 1:
+                                        # Define a cor das referências de acordo com o tema selecionado
+                                        ref_line_color = 'rgba(253, 224, 71, 0.85)' if tema_is_dark else 'rgba(239, 68, 68, 0.85)'
+                                        
+                                        scatter_args_min = dict(
+                                            x=x_vals,
+                                            y=[limit_min] * len(x_vals),
+                                            name=f"Mínimo Ref ({limit_min}) - {exame_nome}",
+                                            mode='lines',
+                                            line=dict(color=ref_line_color, width=1.5, dash='dash'),
+                                            hoverinfo='none',
+                                            showlegend=True,
+                                            visible=ref_inicial_visible
+                                        )
+                                        scatter_args_max = dict(
+                                            x=x_vals,
+                                            y=[limit_max] * len(x_vals),
+                                            name=f"Máximo Ref ({limit_max}) - {exame_nome}",
+                                            mode='lines',
+                                            line=dict(color=ref_line_color, width=1.5, dash='dash'),
+                                            hoverinfo='none',
+                                            showlegend=True,
+                                            visible=ref_inicial_visible
+                                        )
+                                        if yaxis:
+                                            scatter_args_min['yaxis'] = yaxis
+                                            scatter_args_max['yaxis'] = yaxis
+                                            
+                                        if limit_min is not None:
+                                            fig.add_trace(go.Scatter(**scatter_args_min))
+                                        if limit_max is not None:
+                                            fig.add_trace(go.Scatter(**scatter_args_max))
+                        except Exception as ex_ref:
+                            logger.error(f"Erro ao plotar linhas de referência para {exame_nome}: {ex_ref}")
+
                     # Se houver mais de uma unidade diferente (ex: mg/dL e %)
                     if len(unidades) > 1:
                         primary_unit = unidades[0]
@@ -820,6 +952,8 @@ else:
                                     hovertemplate=f"<span style='color:{cor}; font-weight:bold;'>%{{customdata}}</span><br>Resultado: %{{text}} {unit}<extra></extra>",
                                     hoverlabel=dict(bordercolor=cor)
                                 ))
+                                # Adiciona as linhas de referência no Eixo Secundário
+                                add_reference_traces(exame_nome, group, yaxis="y2")
                             else:
                                 # Plota no Eixo Y Primário
                                 fig.add_trace(go.Scatter(
@@ -835,6 +969,8 @@ else:
                                     hovertemplate=f"<span style='color:{cor}; font-weight:bold;'>%{{customdata}}</span><br>Resultado: %{{text}} {unit}<extra></extra>",
                                     hoverlabel=dict(bordercolor=cor)
                                 ))
+                                # Adiciona as linhas de referência no Eixo Primário
+                                add_reference_traces(exame_nome, group)
                         
                         # Configura layouts dos dois eixos
                         fig.update_layout(
@@ -871,123 +1007,8 @@ else:
                                 hoverlabel=dict(bordercolor=cor)
                             ))
                             
-                            # Se for selecionado exatamente um único exame, adiciona linhas de limite de referência no gráfico
-                            if len(exames_selecionados) == 1:
-                                ref_csv_path = "data/exames/exame_references.csv"
-                                if os.path.exists(ref_csv_path):
-                                    try:
-                                        import csv
-                                        from datetime import datetime
-                                        # Coleta dados clínicos do paciente exibido na tela para carregar o VR correto
-                                        p_sex = "Ambos"
-                                        p_birth = None
-                                        p_preg = False
-                                        
-                                        # Tenta carregar metadados do config correspondentes ao selected_paciente
-                                        from app.data_extractor_reference import load_patient_metadata
-                                        pat_meta = load_patient_metadata(selected_paciente)
-                                        if pat_meta:
-                                            p_sex = pat_meta.get("sexo", "Ambos")
-                                            p_birth = pat_meta.get("data_nascimento")
-                                            p_preg = pat_meta.get("gravidez", False)
-                                        else:
-                                            # Fallback para o usuário logado se não achar
-                                            p_sex = user_data.get("sexo", "Ambos")
-                                            p_birth = user_data.get("data_nascimento")
-                                            p_preg = user_data.get("gravidez", False)
-                                            
-                                        p_age = None
-                                        p_faixa = "Ambos"
-                                        
-                                        # Identifica a data mais recente do grupo para calcular idade
-                                        if 'Data Formatada' in group.columns and not group['Data Formatada'].isna().all():
-                                            idx_max = group['Data Formatada'].idxmax()
-                                            last_coleta = group.loc[idx_max, 'Data Exame']
-                                        else:
-                                            last_coleta = group['Data Exame'].max()
-                                            
-                                        if p_birth and last_coleta:
-                                            birth_d = datetime.strptime(p_birth, "%d/%m/%d%y" if len(p_birth.split('/')[-1]) == 2 else "%d/%m/%Y")
-                                            exam_d = datetime.strptime(last_coleta, "%d/%m/%Y")
-                                            p_age = exam_d.year - birth_d.year - ((exam_d.month, exam_d.day) < (birth_d.month, birth_d.day))
-                                            p_faixa = "Adulto" if p_age > 20 else "Infantil"
-                                            
-                                        ref_text = ""
-                                        print(f"DEBUG GRAPH REF: exame_nome={exame_nome}, p_sex={p_sex}, p_faixa={p_faixa}, p_preg={p_preg}")
-                                        with open(ref_csv_path, 'r', encoding='utf-8') as ref_f:
-                                            ref_reader = csv.reader(ref_f)
-                                            next(ref_reader, None)  # Pula header
-                                            for ref_row in ref_reader:
-                                                if len(ref_row) >= 8:
-                                                    exam_name, _, ref_c, ref_p, r_sex, r_faixa, r_preg, _ = ref_row
-                                                    if exam_name.upper().strip() == exame_nome.upper().strip():
-                                                        print(f"DEBUG GRAPH MATCH: exam_name={exam_name}, r_sex={r_sex}, r_faixa={r_faixa}, r_preg={r_preg}")
-                                                        # Valida compatibilidade clínica
-                                                        if r_sex and r_sex != "Ambos" and p_sex and r_sex.upper() != p_sex.upper():
-                                                            print("DEBUG GRAPH SKIP: sex mismatch")
-                                                            continue
-                                                        if r_faixa and r_faixa != "Ambos" and p_faixa and r_faixa.upper() != p_faixa.upper():
-                                                            print("DEBUG GRAPH SKIP: faixa mismatch")
-                                                            continue
-                                                        if r_preg and r_preg.upper() != str(p_preg).upper():
-                                                            print("DEBUG GRAPH SKIP: preg mismatch")
-                                                            continue
-                                                        ref_text = ref_p if ref_p else ref_c
-                                                        print(f"DEBUG GRAPH FOUND REF: {ref_text}")
-                                                        break
-                                        
-                                        if ref_text:
-                                            # Tenta extrair padrões comuns de valores numéricos de referência
-                                            # Substitui virgulas por pontos para facilitar
-                                            ref_norm = ref_text.replace(',', '.')
-                                            
-                                            limit_min = None
-                                            limit_max = None
-                                            
-                                            # Intervalo: "DE X A Y" ou "X A Y" ou "X - Y" ou "X E Y" ou "X ATE Y"
-                                            match_range = re.search(r'(?:DE\s+)?([\d\.]+)\s*(?:A|ATE|-|E)\s+([\d\.]+)', ref_norm, re.IGNORECASE)
-                                            # Superior: "SUPERIOR A X" ou "MAIOR QUE X" ou "SUPERIOR OU IGUAL A X" ou "MAIOR OU IGUAL A X"
-                                            match_sup = re.search(r'(?:SUPERIOR|MAIOR)\s+(?:A|QUE|OU\s+IGUAL\s+A)?\s*([\d\.]+)', ref_norm, re.IGNORECASE)
-                                            # Inferior: "INFERIOR A X" ou "MENOR QUE X" ou "ATE X" ou "INFERIOR OU IGUAL A X" ou "MENOR OU IGUAL A X"
-                                            match_inf = re.search(r'(?:INFERIOR|MENOR|ATE)\s+(?:A|QUE|OU\s+IGUAL\s+A)?\s*([\d\.]+)', ref_norm, re.IGNORECASE)
-                                            
-                                            if match_range:
-                                                limit_min = float(match_range.group(1))
-                                                limit_max = float(match_range.group(2))
-                                            elif match_inf:
-                                                limit_max = float(match_inf.group(1))
-                                            elif match_sup:
-                                                limit_min = float(match_sup.group(1))
-                                                
-                                            # Adiciona as linhas horizontais de referência
-                                            if limit_min is not None or limit_max is not None:
-                                                x_vals = group['Data Formatada'].tolist()
-                                                if len(x_vals) >= 1:
-                                                                                     # Define a cor das referências de acordo com o tema selecionado
-                                                    ref_line_color = 'rgba(253, 224, 71, 0.85)' if tema_is_dark else 'rgba(239, 68, 68, 0.85)'
-                                                    
-                                                    if limit_min is not None:
-                                                        fig.add_trace(go.Scatter(
-                                                            x=x_vals,
-                                                            y=[limit_min] * len(x_vals),
-                                                            name=f"Mínimo Ref ({limit_min})",
-                                                            mode='lines',
-                                                            line=dict(color=ref_line_color, width=1.5, dash='dash'),
-                                                            hoverinfo='none',
-                                                            showlegend=True
-                                                        ))
-                                                    if limit_max is not None:
-                                                        fig.add_trace(go.Scatter(
-                                                            x=x_vals,
-                                                            y=[limit_max] * len(x_vals),
-                                                            name=f"Máximo Ref ({limit_max})",
-                                                            mode='lines',
-                                                            line=dict(color=ref_line_color, width=1.5, dash='dash'),
-                                                            hoverinfo='none',
-                                                            showlegend=True
-                                                        ))
-                                    except Exception as ex_ref:
-                                        logger.error(f"Erro ao plotar linhas de referência: {ex_ref}")
+                            # Adiciona as referências no Eixo Único
+                            add_reference_traces(exame_nome, group)
                          
                         fig.update_layout(
                             yaxis=dict(
@@ -1020,7 +1041,7 @@ else:
                         plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)",
                         height=435,  # Altura aprovada pelo usuario
-                        margin=dict(t=80, b=20, l=10, r=10),  # Margens aprovadas pelo usuario
+                        margin=dict(t=135, b=20, l=10, r=10),  # Margens aprovadas pelo usuario
                         xaxis=dict(
                             title=f"Data do Exame<br>Paciente: {selected_paciente}",
                             tickmode="array",
@@ -1104,6 +1125,141 @@ else:
                     }
                     with pd_st.container(key="container_do_grafico"):
                         pd_st.plotly_chart(fig, width="stretch", config=plotly_config, key="plotly_static")
+                        
+                        # Injeta script JS para escutar cliques de legenda e alternar visibilidade de referências
+                        js_restyle_handler = """
+<script>
+(function() {
+    function setupPlotlyListener() {
+        const doc = (window.parent && window.parent.document) || document;
+        // Seletor amplo para encontrar o gráfico do Plotly
+        const plots = doc.querySelectorAll('.js-plotly-plot, [data-testid="stPlotlyChart"] .plotly, .plotly');
+        
+        console.log("[Antigravity DEBUG] setupPlotlyListener rodando. Gráficos encontrados:", plots.length);
+        
+        plots.forEach(function(plotEl) {
+            if (plotEl.__refListenerAttached) return;
+            
+            if (typeof plotEl.on !== 'function') {
+                return; // O Plotly ainda não inicializou este elemento, tenta novamente no próximo segundo
+            }
+            
+            plotEl.__refListenerAttached = true;
+            console.log("[Antigravity DEBUG] Anexando evento plotly_restyle ao gráfico:", plotEl.id || "plotly_plot");
+            
+            plotEl.on('plotly_restyle', function(eventData) {
+                if (plotEl.__updatingRefs) return;
+                
+                const data = plotEl.data;
+                if (!data) return;
+                
+                let visibleMainIndices = [];
+                let refMap = {}; // mapeia index de linha principal -> lista de indices de suas referências
+                
+                // 1. Identifica quais linhas principais estão ativas e mapeia as referências
+                for (let i = 0; i < data.length; i++) {
+                    const trace = data[i];
+                    const isRef = trace.name && (
+                        trace.name.includes("Ref (") || 
+                        trace.name.includes("Mínimo Ref") || 
+                        trace.name.includes("Máximo Ref") ||
+                        trace.name.includes("Minimo Ref") || 
+                        trace.name.includes("Maximo Ref")
+                    );
+                    
+                    if (!isRef) {
+                        const isVisible = trace.visible !== false && trace.visible !== 'legendonly';
+                        if (isVisible) {
+                            visibleMainIndices.push(i);
+                        }
+                    } else {
+                        // Tenta associar a referência à sua linha principal correspondente analisando o nome
+                        for (let j = 0; j < data.length; j++) {
+                            const mainTrace = data[j];
+                            const isMainRef = mainTrace.name && (
+                                mainTrace.name.includes("Ref (") || 
+                                mainTrace.name.includes("Mínimo Ref") || 
+                                mainTrace.name.includes("Máximo Ref") ||
+                                mainTrace.name.includes("Minimo Ref") || 
+                                mainTrace.name.includes("Maximo Ref")
+                            );
+                            if (j !== i && mainTrace.name && !isMainRef) {
+                                // Limpa qualquer sufixo de unidade como " (mg/dL)" do nome principal para casar com a referência
+                                const mainNameClean = mainTrace.name.split(' (')[0].trim();
+                                if (trace.name.includes(mainNameClean)) {
+                                    if (!refMap[j]) refMap[j] = [];
+                                    refMap[j].push(i);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                console.log("[Antigravity DEBUG] Linhas principais ativas:", visibleMainIndices.length, "Índices:", visibleMainIndices);
+                
+                // 2. Decide a visibilidade das referências
+                let updateVisible = [];
+                let updateIndices = [];
+                
+                for (let i = 0; i < data.length; i++) {
+                    const trace = data[i];
+                    const isRef = trace.name && (
+                        trace.name.includes("Ref (") || 
+                        trace.name.includes("Mínimo Ref") || 
+                        trace.name.includes("Máximo Ref") ||
+                        trace.name.includes("Minimo Ref") || 
+                        trace.name.includes("Maximo Ref")
+                    );
+                    if (isRef) {
+                        let shouldBeVisible = false;
+                        // Plota a referência apenas se houver exatamente UMA linha principal ativa
+                        if (visibleMainIndices.length === 1) {
+                            const visibleMainIdx = visibleMainIndices[0];
+                            if (refMap[visibleMainIdx] && refMap[visibleMainIdx].includes(i)) {
+                                shouldBeVisible = true;
+                            }
+                        }
+                        
+                        const currentVisible = trace.visible !== false && trace.visible !== 'legendonly';
+                        if (currentVisible !== shouldBeVisible) {
+                            updateVisible.push(shouldBeVisible ? true : false); // false oculta do plot e da legenda
+                            updateIndices.push(i);
+                        }
+                    }
+                }
+                
+                // 3. Aplica restyle do Plotly se necessário
+                if (updateIndices.length > 0) {
+                    console.log("[Antigravity DEBUG] Atualizando visibilidade das referências:", updateIndices, "Para:", updateVisible);
+                    plotEl.__updatingRefs = true;
+                    const PlotlyLib = (window.parent && window.parent.Plotly) || window.Plotly;
+                    if (PlotlyLib) {
+                        PlotlyLib.restyle(plotEl, { visible: updateVisible }, updateIndices)
+                            .then(() => {
+                                plotEl.__updatingRefs = false;
+                            })
+                            .catch((err) => {
+                                console.error("[Antigravity DEBUG] Erro no Plotly.restyle:", err);
+                                plotEl.__updatingRefs = false;
+                            });
+                    } else {
+                        console.error("[Antigravity DEBUG] Biblioteca Plotly não encontrada!");
+                        plotEl.__updatingRefs = false;
+                    }
+                }
+            });
+        });
+    }
+    
+    // Roda periodicamente para suportar recargas/reruns do Streamlit
+    if (!window.__setupPlotlyInterval) {
+        window.__setupPlotlyInterval = setInterval(setupPlotlyListener, 1000);
+    }
+})();
+</script>
+"""
+                        pd_st.components.v1.html(js_restyle_handler, height=0, width=0)
 
 
         with col2:

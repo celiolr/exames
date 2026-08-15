@@ -91,11 +91,13 @@ graph LR
 ## ✨ Características
 
 * **Isolamento de Dados:** Cada paciente cadastrado possui sua própria base de dados CSV protegida e isolada.
+* **Segurança e Criptografia:** Senhas de portais de laudos podem ser salvas em formato criptografado no arquivo `config.ini` utilizando Fernet (AES-128 na especificação do cryptography), com chave privada auto-gerada localmente.
 * **Crawler Adaptativo:** Implementado com [D4vinci/Scrapling](https://github.com/D4vinci/Scrapling), suportando sessões dinâmicas assíncronas contra mecanismos de segurança.
 * **Validação Amostral Cruzada (Auditoria 100%):** Lógica independente que abre os PDFs brutos originais e busca os dados gravados no CSV de forma contextual. Configurado por padrão para **100% de amostragem** (`AUDIT_SAMPLE_PERCENTAGE = 1.0`) para dados de saúde.
-* **Design Premium Dark Mode:** Dashboard customizado com estilos modernos CSS sob medida para Streamlit.
+* **Design Premium Dark/Light Mode:** Dashboard moderno com estilos CSS responsivos às variáveis nativas do Streamlit.
 * **Gráficos Dinâmicos com Eixo Duplo:** O Plotly projeta indicadores com unidades diferentes (ex: `mg/dL` vs `%`) no mesmo gráfico sem quebrar a escala.
 * **Posicionamento Dinâmico de Rótulos:** Algoritmo dinâmico que detecta pontos coincidentes no tempo e altera as posições de texto (`textposition`) para evitar sobreposições de anotações no gráfico.
+* **Controle Dinâmico de Referências via Legenda:** As linhas horizontais tracejadas dos Valores de Referência (VR) de todos os exames são carregadas no gráfico. Caso o usuário oculte curvas ou selecione/isole um exame na legenda (via clique ou double-click), o script JavaScript detecta a interação no cliente e exibe instantaneamente a linha de referência correspondente (tanto em eixo único quanto em eixos duplos), ocultando-as caso múltiplos exames estejam visíveis.
 * **Cards de Métricas Inteligentes:** Exibição ultra compacta das últimas coletas de exames com a cor da fonte e da borda esquerda sincronizadas à linha do gráfico correspondente.
 * **Sistema de Logging Robusto:** Integração com a biblioteca `loguru` para logs estruturados, coloridos no console e gravados de forma rotativa diária em `_temp/pipeline.log`.
 
@@ -207,8 +209,25 @@ exemplo_lab = https://portal.exemplo.com.br/shift/login
 # Configure os pacientes no formato JSON dict (em uma única linha)
 # Associe o laboratório correspondente à chave "lab"
 # Parâmetro "role" pode ser "admin" (acesso a dados de todos os pacientes) ou "user" (restrito aos seus próprios dados)
-paciente_1 = {"nome": "Nome Completo do Paciente", "user": "Usuario", "pass": "MinhaSenha", "lab": "exemplo_lab", "role": "admin"}
+paciente_1 = {"nome": "Nome Completo do Paciente", "user": "Usuario", "pass": "enc:gAAAAABmz4x2...", "lab": "exemplo_lab", "data_nascimento": "01/01/2003", "sexo": "Feminino", "gravidez": false, "role": "admin"}
 ```
+
+### 🔐 Criptografia de Senhas (Recomendado)
+
+Para evitar expor senhas em texto plano no disco local, o sistema possui um utilitário integrado de criptografia simétrica utilizando a biblioteca `cryptography` (mecanismo Fernet/AES):
+
+1. **Criptografar Senha:**
+   Ative o ambiente virtual e execute o script passando a senha desejada entre aspas:
+   ```bash
+   python app/security.py "sua_senha_secreta"
+   ```
+2. **Nova Chave Privada:**
+   Na primeira execução, o script gerará automaticamente uma chave secreta no arquivo `secret.key` na raiz do projeto. **Importante:** Este arquivo é automaticamente ignorado no `.gitignore` para nunca ser commitado.
+3. **Atualizar Configuração:**
+   Copie a string resultante que começa com `enc:` (ex: `enc:gAAAAABmz4x2O6d9...`) e cole-a no campo `"pass"` do respectivo paciente no arquivo `config.ini`.
+4. **Descriptografia Automática:**
+   O pipeline e o crawler descriptografam a senha em tempo de execução na memória de forma totalmente automática.
+5. **Compatibilidade:** O sistema mantém suporte retroativo automático a senhas salvas em texto plano (sem o prefixo `enc:`).
 
 [voltar ao topo](#-índice)
 

@@ -186,3 +186,64 @@ Este documento detalha o planejamento de desenvolvimento dividido em Sprints gra
   - [x] 8.4.1: Criar mockup 100% anonimizado em `_docs/dashboard_mockup.png` sob o nome de "Lucas Silva".
   - [x] 8.4.2: Limpar relatórios médicos MD e screenshots de dados reais de exames fora da pasta `data/`.
 - [x] Sprint 8 Concluída
+
+---
+
+## Sprint 9: Extração Dinâmica de Valores de Referência (VR)
+**Objetivo:** Criar um pipeline automatizado que identifique o PDF/Markdown mais recente baixado na pasta `data/exames/`, extraia as unidades e os blocos completos de valores de referência (VR) para cada exame identificado e realize a auditoria de integridade para garantir 100% de precisão clínica.
+
+- [x] **Tarefa 9.1: Criação do Extrator de Referências (`app/data_extractor_reference.py`)**
+  - [x] 9.1.1: Desenvolver a lógica para selecionar **apenas o único PDF/Markdown mais recente** de toda a pasta `data/exames/` (baseando-se no nome/data do arquivo).
+  - [x] 9.1.2: Desenvolver parser adaptativo de VR e unidades operando **estritamente sobre esse arquivo mais recente**, contornando as variações de formatação do texto.
+  - [x] 9.1.3: Carregar metadados do paciente (`data_nascimento`, `sexo`) a partir do `config.ini` para calcular idade no momento do exame e determinar os limites exatos do paciente.
+  - [x] 9.1.4: Salvar o resultado consolidado em `data/exames/exame_references.csv`.
+  - [x] 9.1.5: Alterar o extrator para rodar sobre o **mais recente de CADA paciente** de modo a mesclar as referências de todos os exames cobertos na base consolidada utilizando a chave composta clínica (`Exame`, `Sexo`, `Faixa_Etaria`, `Gestante`).
+  - [x] 9.1.6: Incluir as colunas de contexto clínico (`Sexo`, `Faixa_Etaria`, `Gestante`) e a coluna `Data_Ultima_Atualizacao` em cada linha do `exame_references.csv` registrando a data do laudo correspondente.
+- [x] **Tarefa 9.2: Criação do Auditor de Referências (`app/auditoria_reference.py`)**
+  - [x] 9.2.1: Implementar algoritmo que localiza os blocos de VR e unidades extraídos diretamente no PDF bruto correspondente via `pdfplumber`.
+  - [x] 9.2.2: Exportar relatórios de auditoria detalhados de integridade na pasta `data/exames/auditoria/`.
+- [x] **Tarefa 9.3: Testes Unitários de Referências (`tests/test_references.py`)**
+  - [x] 9.3.1: Escrever testes unitários em `tests/test_references.py` validando o parser do extrator contra mock de strings de VR com diferentes layouts (idades, jejum, sexo).
+  - [x] 9.3.2: Validar o algoritmo de busca estrita/contextual do auditor contra mocks de estruturas de PDF.
+  - [x] 9.3.3: Integrar a execução dos testes na suíte geral (`tests/run_tests.py`).
+- [x] **Tarefa 9.4: Integração no Pipeline e Dashboard**
+  - [x] 9.4.1: Configurar a chamada automática do extrator de referências quando novos exames forem processados.
+  - [x] 9.4.2: Permitir exibir e destacar esses VRs dinâmicos no dashboard Streamlit.
+  - [x] 9.4.3: Exibir linhas de referência (limite superior/inferior) como linhas horizontais tracejadas no gráfico quando apenas um exame individual estiver selecionado.
+
+- [x] Sprint 9 Concluída
+
+---
+
+## Sprint 10: Suporte a Tema Claro/Escuro Dinâmico e Reatividade das Referências
+**Objetivo:** Adaptar os estilos do dashboard para responder dinamicamente ao tema do Streamlit, organizar os controles da sidebar e habilitar a exibição reativa de limites de referência baseada na legenda.
+
+- [x] **Tarefa 10.1: CSS Responsivo ao Tema Nativo**
+  - [x] 10.1.1: Substituir cores fixas no CSS por variáveis CSS nativas (`var(--background-color)`, `var(--text-color)`, etc.).
+- [x] **Tarefa 10.2: Detecção Dinâmica de Tema e Eixo Duplo**
+  - [x] 10.2.1: Implementar e depurar a detecção automática do tema do Streamlit (para ajustar cores de linhas de referência no Plotly).
+  - [x] 10.2.2: Ajustar as margens do gráfico e as curvas do Plotly de eixo duplo para suportar referências.
+- [x] **Tarefa 10.3: Ordem dos Filtros**
+  - [x] 10.3.1: Reposicionar o filtro "Exame / Componente" logo abaixo do filtro "Médico" na sidebar.
+- [x] **Tarefa 10.4: Visibilidade por Legenda Client-Side**
+  - [x] 10.4.1: Injetar script em JavaScript para restyle dinâmico ocultando/exibindo referências conforme a contagem de curvas ativas (double-click/legend toggle).
+- [x] Sprint 10 Concluída
+
+---
+
+## Sprint 11: Criptografia e Segurança de Credenciais
+**Objetivo:** Implementar criptografia de senhas no `config.ini` de forma que as senhas não fiquem visíveis em texto plano no disco local, mantendo suporte transparente a senhas antigas.
+
+- [x] **Tarefa 11.1: Módulo de Segurança Criptográfica (`app/security.py`)**
+  - [x] 11.1.1: Criar lógica com Fernet (`cryptography`) que gera/carrega chaves locais (`secret.key`).
+  - [x] 11.1.2: Implementar rotinas de criptografia/descriptografia com prefixo identificador `enc:`.
+  - [x] 11.1.3: Assegurar que `secret.key` seja incluído no `.gitignore`.
+- [x] **Tarefa 11.2: Integração e Fallback Transparente**
+  - [x] 11.2.1: Modificar carregadores de configuração (`crawler.py` e `data_extractor_reference.py`) para descriptografar dados de senha.
+  - [x] 11.2.2: Garantir que senhas em formato texto plano ainda funcionem (compatibilidade retroativa).
+- [x] **Tarefa 11.3: Interface CLI e Testes**
+  - [x] 11.3.1: Criar terminal CLI interativo em `app/security.py` para codificação rápida de senhas pelo usuário.
+  - [x] 11.3.2: Desenvolver testes unitários completos em `tests/test_security.py` cobrindo fluxos de sucesso e casos de erro.
+- [x] Sprint 11 Concluída
+
+

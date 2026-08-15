@@ -81,6 +81,10 @@ def load_config_data():
             
         # 3. Carregar Pacientes da subseção [Pacientes]
         if 'Pacientes' in config:
+            try:
+                from app.security import decrypt_password
+            except ImportError:
+                from security import decrypt_password
             for idx, (key, value) in enumerate(config['Pacientes'].items(), 1):
                 try:
                     patient_data = json.loads(value)
@@ -88,7 +92,7 @@ def load_config_data():
                         'idx': idx,
                         'nome': patient_data.get("nome"),
                         'user': patient_data.get("user"),
-                        'pass': patient_data.get("pass"),
+                        'pass': decrypt_password(patient_data.get("pass")),
                         'role': patient_data.get("role", "user"),
                         'lab': patient_data.get("lab", "pretti")
                     })
