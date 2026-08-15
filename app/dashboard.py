@@ -565,7 +565,8 @@ else:
     
     # Sidebar: informações de login e Sair
     pd_st.sidebar.markdown(f"👤 **Usuário:** {user_data.get('nome')}")
-    pd_st.sidebar.markdown(f"🔑 **Perfil:** {user_data.get('role', 'user').capitalize()}")
+    role_label = "Administrador" if user_data.get('role') == "admin" else "Usuário"
+    pd_st.sidebar.markdown(f"🔑 **Perfil:** {role_label}")
     if pd_st.sidebar.button("🚪 Sair", use_container_width=True, type="primary"):
         try:
             cookies.delete("exames_auth_user")
