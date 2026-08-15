@@ -765,6 +765,11 @@ else:
                             idx_exame = exames_selecionados.index(exame_nome) if exame_nome in exames_selecionados else 0
                             text_pos = posicoes_texto[idx_exame % len(posicoes_texto)]
                             
+                            # Convert hex color to rgba for smooth area filling
+                            hex_color = cor.lstrip('#')
+                            rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                            fill_rgba = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15)"
+                            
                             if unit == secondary_unit:
                                 # Plota no Eixo Y Secundário
                                 fig.add_trace(go.Scatter(
@@ -775,6 +780,8 @@ else:
                                     text=group['Resultado'],
                                     textposition=group['Posicao Texto'].tolist(),
                                     yaxis="y2",
+                                    fill='tozeroy',
+                                    fillcolor=fill_rgba,
                                     line=dict(color=cor),
                                     marker=dict(color=cor),
                                     customdata=[exame_nome] * len(group),
@@ -790,6 +797,8 @@ else:
                                     mode='lines+markers+text',
                                     text=group['Resultado'],
                                     textposition=group['Posicao Texto'].tolist(),
+                                    fill='tozeroy',
+                                    fillcolor=fill_rgba,
                                     line=dict(color=cor),
                                     marker=dict(color=cor),
                                     customdata=[exame_nome] * len(group),
@@ -818,6 +827,12 @@ else:
                         unit = unidades[0] if len(unidades) == 1 else ""
                         for exame_nome, group in df_plot.groupby('Exame/Componente'):
                             cor = cor_map.get(exame_nome, "#0284c7")
+                            
+                            # Convert hex color to rgba for smooth area filling
+                            hex_color = cor.lstrip('#')
+                            rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                            fill_rgba = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15)"
+                            
                             fig.add_trace(go.Scatter(
                                 x=group['Data Formatada'],
                                 y=group['Valor Numérico'],
@@ -825,6 +840,8 @@ else:
                                 mode='lines+markers+text',
                                 text=group['Resultado'],
                                 textposition=group['Posicao Texto'].tolist(),
+                                fill='tozeroy',
+                                fillcolor=fill_rgba,
                                 line=dict(color=cor),
                                 marker=dict(color=cor),
                                 customdata=[exame_nome] * len(group),
