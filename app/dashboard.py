@@ -4,6 +4,7 @@ import plotly.express as px
 import os
 import time
 import sys
+import re
 # Adicionar o diretorio pai ao sys.path para importacoes absolutas do modulo 'app'
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -24,19 +25,19 @@ pd_st.set_page_config(
 pd_st.markdown("""
 <style>
     .main {
-        background-color: #0f1116;
-        color: #e2e8f0;
+        background-color: var(--background-color);
+        color: var(--text-color);
     }
     .stAppHeader {
-        background-color: #0f1116;
+        background-color: var(--background-color);
     }
     h1, h2, h3 {
-        color: #ffffff !important;
+        color: var(--text-color) !important;
         font-family: 'Outfit', 'Inter', sans-serif;
     }
     .stSidebar {
-        background-color: #161920 !important;
-        border-right: 1px solid #2d3748;
+        background-color: var(--secondary-background-color) !important;
+        border-right: 1px solid rgba(128, 128, 128, 0.2);
     }
     /* Estilo para tornar os filtros mais compactos verticalmente */
     div[data-testid="stSidebar"] {
@@ -315,6 +316,18 @@ def run_pipeline_if_new_files(force=False, target_user=None):
         except Exception as e:
             logger.error(f"[Auditoria] ERRO: {e}")
             pd_st.error(f"Erro ao auditar dados: {e}")
+            
+        pd_st.toast("Atualizando referências clínicas...", icon="🔬")
+        t0 = time.time()
+        try:
+            from app.data_extractor_reference import main as run_extractor_ref
+            from app.auditoria_reference import main as run_audit_ref
+            run_extractor_ref()
+            run_audit_ref()
+            logger.info(f"[Referências] {time.time() - t0:.1f}s")
+        except Exception as e:
+            logger.error(f"[Referências] ERRO: {e}")
+            pd_st.error(f"Erro ao processar referências dinâmicas: {e}")
         
         # Limpar o cache de carregamento de dados do streamlit para carregar os novos
         pd_st.cache_data.clear()
@@ -391,6 +404,18 @@ if not _state["done"]:
                 logger.info(f"[Auditoria] {time.time() - t0:.1f}s")
             except Exception as e:
                 logger.error(f"[Auditoria] ERRO: {e}")
+            progress_bar.progress(90)
+            
+            pd_st.write("🔬 **Etapa Final** — Atualizando referências clínicas dinâmicas...")
+            t0 = time.time()
+            try:
+                from app.data_extractor_reference import main as _run_extractor_ref
+                from app.auditoria_reference import main as _run_audit_ref
+                _run_extractor_ref()
+                _run_audit_ref()
+                logger.info(f"[Referências] {time.time() - t0:.1f}s")
+            except Exception as e:
+                logger.error(f"[Referências] ERRO: {e}")
             progress_bar.progress(100)
     
             elapsed = time.time() - t_total
@@ -451,7 +476,7 @@ if not pd_st.session_state["authenticated"]:
         with pd_st.form("login_form"):
             username_input = pd_st.text_input("Usuário")
             password_input = pd_st.text_input("Senha", type="password")
-            submit_button = pd_st.form_submit_button("Entrar", type="primary", use_container_width=True)
+            submit_button = pd_st.form_submit_button("Entrar", type="primary", width="stretch")
         
         if submit_button:
             from app.crawler import load_config_data
@@ -540,7 +565,7 @@ if df.empty:
     pd_st.error("Nenhum dado de exame disponível.")
     
     # Adicionar botão de Sair na Sidebar mesmo se não houver dados
-    if pd_st.sidebar.button("🚪 Sair", use_container_width=True, type="primary"):
+    if pd_st.sidebar.button("🚪 Sair", width="stretch", type="primary"):
         try:
             cookies.delete("exames_auth_user")
         except Exception:
@@ -567,7 +592,7 @@ else:
     pd_st.sidebar.markdown(f"👤 **Usuário:** {user_data.get('nome')}")
     role_label = "Administrador" if user_data.get('role') == "admin" else "Usuário"
     pd_st.sidebar.markdown(f"🔑 **Perfil:** {role_label}")
-    if pd_st.sidebar.button("🚪 Sair", use_container_width=True, type="primary"):
+    if pd_st.sidebar.button("🚪 Sair", width="stretch", type="primary"):
         try:
             cookies.delete("exames_auth_user")
         except Exception:
@@ -579,7 +604,7 @@ else:
         
     # Botão de atualizar exames diretamente no topo da Sidebar (exclusivo para admin)
     if is_admin:
-        if pd_st.sidebar.button("🔄 Atualizar Exames (PDF)", type="primary", use_container_width=True):
+        if pd_st.sidebar.button("🔄 Atualizar Exames (PDF)", type="primary", width="stretch"):
             with pd_st.spinner("Buscando novos PDFs e processando..."):
                 target_user = None if is_admin else user_data.get("user")
                 updated = run_pipeline_if_new_files(force=True, target_user=target_user)
@@ -589,6 +614,21 @@ else:
                     pd_st.rerun()
                 else:
                     pd_st.info("Nenhum novo exame para processar.")
+
+    # Detecta dinamicamente se o tema ativo do Streamlit é escuro ou claro
+    tema_is_dark = True
+    try:
+        # Tenta ler a opção de tema das configurações do Streamlit
+        theme_base = pd_st.config.get_option("theme.base")
+        if theme_base:
+            tema_is_dark = (theme_base.lower() != "light")
+    except Exception:
+        try:
+            theme_base = pd_st.get_option("theme.base")
+            if theme_base:
+                tema_is_dark = (theme_base.lower() != "light")
+        except Exception:
+            tema_is_dark = True
 
     # SIDEBAR - Filtros solicitados
     pd_st.sidebar.header("🔍 Filtros de Busca")
@@ -619,7 +659,7 @@ else:
             
     # Renderizar botões de preset
     for p_name in presets.keys():
-        if pd_st.sidebar.button(p_name, use_container_width=True):
+        if pd_st.sidebar.button(p_name, width="stretch"):
             if p_name == "Hemograma Completo":
                 resolved = [e for e in ["Hemograma - Hemoglobina", "Hemograma - Hematocrito", "Leucocitos", "Plaquetas"] if e in all_exams]
             else:
@@ -680,6 +720,15 @@ else:
     medicos_opts = ["Todos"] + sorted(df_paciente['Médico'].dropna().unique().tolist())
     selected_medico = pd_st.sidebar.selectbox("Médico", medicos_opts)
     
+    # 5. Filtro Exame / Componente (baseado no paciente selecionado) - reposicionado para logo após Médico
+    exames_opts = sorted(df_paciente['Exame/Componente'].dropna().unique().tolist())
+    selected_exames = pd_st.sidebar.multiselect(
+        "Exame / Componente", 
+        exames_opts, 
+        key="selected_exames_multiselect"
+    )
+    pd_st.session_state["selected_exames"] = selected_exames
+    
     # 3. Filtro Laboratório (baseado no paciente selecionado)
     labs_opts = ["Todos"] + sorted(df_paciente['Laboratório'].dropna().unique().tolist())
     selected_lab = pd_st.sidebar.selectbox("Laboratório", labs_opts)
@@ -687,16 +736,6 @@ else:
     # 4. Filtro Data Exame (baseado no paciente selecionado)
     datas_opts = sorted(df_paciente['Data Exame'].dropna().unique().tolist())
     selected_datas = pd_st.sidebar.multiselect("Data do Exame", datas_opts, default=[])
-    
-    # 5. Filtro Exame / Componente (baseado no paciente selecionado)
-    exames_opts = sorted(df_paciente['Exame/Componente'].dropna().unique().tolist())
-    
-    selected_exames = pd_st.sidebar.multiselect(
-        "Exame / Componente", 
-        exames_opts, 
-        key="selected_exames_multiselect"
-    )
-    pd_st.session_state["selected_exames"] = selected_exames
 
     # Aplicando filtros no DataFrame final
     df_filtered = df_paciente.copy()
@@ -810,9 +849,9 @@ else:
                                 overlaying="y",
                                 side="right",
                                 showgrid=False
-                        ),
-                        title="Evolução Temporal (Múltiplas Unidades)"
-                    )
+                            ),
+                            title="Evolução Temporal (Múltiplas Unidades)"
+                        )
                     else:
                         # Eixo único se tudo tiver a mesma unidade
                         unit = unidades[0] if len(unidades) == 1 else ""
@@ -831,24 +870,143 @@ else:
                                 hovertemplate=f"<span style='color:{cor}; font-weight:bold;'>%{{customdata}}</span><br>Resultado: %{{text}} {unit}<extra></extra>",
                                 hoverlabel=dict(bordercolor=cor)
                             ))
+                            
+                            # Se for selecionado exatamente um único exame, adiciona linhas de limite de referência no gráfico
+                            if len(exames_selecionados) == 1:
+                                ref_csv_path = "data/exames/exame_references.csv"
+                                if os.path.exists(ref_csv_path):
+                                    try:
+                                        import csv
+                                        from datetime import datetime
+                                        # Coleta dados clínicos do paciente exibido na tela para carregar o VR correto
+                                        p_sex = "Ambos"
+                                        p_birth = None
+                                        p_preg = False
+                                        
+                                        # Tenta carregar metadados do config correspondentes ao selected_paciente
+                                        from app.data_extractor_reference import load_patient_metadata
+                                        pat_meta = load_patient_metadata(selected_paciente)
+                                        if pat_meta:
+                                            p_sex = pat_meta.get("sexo", "Ambos")
+                                            p_birth = pat_meta.get("data_nascimento")
+                                            p_preg = pat_meta.get("gravidez", False)
+                                        else:
+                                            # Fallback para o usuário logado se não achar
+                                            p_sex = user_data.get("sexo", "Ambos")
+                                            p_birth = user_data.get("data_nascimento")
+                                            p_preg = user_data.get("gravidez", False)
+                                            
+                                        p_age = None
+                                        p_faixa = "Ambos"
+                                        
+                                        # Identifica a data mais recente do grupo para calcular idade
+                                        if 'Data Formatada' in group.columns and not group['Data Formatada'].isna().all():
+                                            idx_max = group['Data Formatada'].idxmax()
+                                            last_coleta = group.loc[idx_max, 'Data Exame']
+                                        else:
+                                            last_coleta = group['Data Exame'].max()
+                                            
+                                        if p_birth and last_coleta:
+                                            birth_d = datetime.strptime(p_birth, "%d/%m/%d%y" if len(p_birth.split('/')[-1]) == 2 else "%d/%m/%Y")
+                                            exam_d = datetime.strptime(last_coleta, "%d/%m/%Y")
+                                            p_age = exam_d.year - birth_d.year - ((exam_d.month, exam_d.day) < (birth_d.month, birth_d.day))
+                                            p_faixa = "Adulto" if p_age > 20 else "Infantil"
+                                            
+                                        ref_text = ""
+                                        print(f"DEBUG GRAPH REF: exame_nome={exame_nome}, p_sex={p_sex}, p_faixa={p_faixa}, p_preg={p_preg}")
+                                        with open(ref_csv_path, 'r', encoding='utf-8') as ref_f:
+                                            ref_reader = csv.reader(ref_f)
+                                            next(ref_reader, None)  # Pula header
+                                            for ref_row in ref_reader:
+                                                if len(ref_row) >= 8:
+                                                    exam_name, _, ref_c, ref_p, r_sex, r_faixa, r_preg, _ = ref_row
+                                                    if exam_name.upper().strip() == exame_nome.upper().strip():
+                                                        print(f"DEBUG GRAPH MATCH: exam_name={exam_name}, r_sex={r_sex}, r_faixa={r_faixa}, r_preg={r_preg}")
+                                                        # Valida compatibilidade clínica
+                                                        if r_sex and r_sex != "Ambos" and p_sex and r_sex.upper() != p_sex.upper():
+                                                            print("DEBUG GRAPH SKIP: sex mismatch")
+                                                            continue
+                                                        if r_faixa and r_faixa != "Ambos" and p_faixa and r_faixa.upper() != p_faixa.upper():
+                                                            print("DEBUG GRAPH SKIP: faixa mismatch")
+                                                            continue
+                                                        if r_preg and r_preg.upper() != str(p_preg).upper():
+                                                            print("DEBUG GRAPH SKIP: preg mismatch")
+                                                            continue
+                                                        ref_text = ref_p if ref_p else ref_c
+                                                        print(f"DEBUG GRAPH FOUND REF: {ref_text}")
+                                                        break
+                                        
+                                        if ref_text:
+                                            # Tenta extrair padrões comuns de valores numéricos de referência
+                                            # Substitui virgulas por pontos para facilitar
+                                            ref_norm = ref_text.replace(',', '.')
+                                            
+                                            limit_min = None
+                                            limit_max = None
+                                            
+                                            # Intervalo: "DE X A Y" ou "X A Y" ou "X - Y" ou "X E Y" ou "X ATE Y"
+                                            match_range = re.search(r'(?:DE\s+)?([\d\.]+)\s*(?:A|ATE|-|E)\s+([\d\.]+)', ref_norm, re.IGNORECASE)
+                                            # Superior: "SUPERIOR A X" ou "MAIOR QUE X" ou "SUPERIOR OU IGUAL A X" ou "MAIOR OU IGUAL A X"
+                                            match_sup = re.search(r'(?:SUPERIOR|MAIOR)\s+(?:A|QUE|OU\s+IGUAL\s+A)?\s*([\d\.]+)', ref_norm, re.IGNORECASE)
+                                            # Inferior: "INFERIOR A X" ou "MENOR QUE X" ou "ATE X" ou "INFERIOR OU IGUAL A X" ou "MENOR OU IGUAL A X"
+                                            match_inf = re.search(r'(?:INFERIOR|MENOR|ATE)\s+(?:A|QUE|OU\s+IGUAL\s+A)?\s*([\d\.]+)', ref_norm, re.IGNORECASE)
+                                            
+                                            if match_range:
+                                                limit_min = float(match_range.group(1))
+                                                limit_max = float(match_range.group(2))
+                                            elif match_inf:
+                                                limit_max = float(match_inf.group(1))
+                                            elif match_sup:
+                                                limit_min = float(match_sup.group(1))
+                                                
+                                            # Adiciona as linhas horizontais de referência
+                                            if limit_min is not None or limit_max is not None:
+                                                x_vals = group['Data Formatada'].tolist()
+                                                if len(x_vals) >= 1:
+                                                                                     # Define a cor das referências de acordo com o tema selecionado
+                                                    ref_line_color = 'rgba(253, 224, 71, 0.85)' if tema_is_dark else 'rgba(239, 68, 68, 0.85)'
+                                                    
+                                                    if limit_min is not None:
+                                                        fig.add_trace(go.Scatter(
+                                                            x=x_vals,
+                                                            y=[limit_min] * len(x_vals),
+                                                            name=f"Mínimo Ref ({limit_min})",
+                                                            mode='lines',
+                                                            line=dict(color=ref_line_color, width=1.5, dash='dash'),
+                                                            hoverinfo='none',
+                                                            showlegend=True
+                                                        ))
+                                                    if limit_max is not None:
+                                                        fig.add_trace(go.Scatter(
+                                                            x=x_vals,
+                                                            y=[limit_max] * len(x_vals),
+                                                            name=f"Máximo Ref ({limit_max})",
+                                                            mode='lines',
+                                                            line=dict(color=ref_line_color, width=1.5, dash='dash'),
+                                                            hoverinfo='none',
+                                                            showlegend=True
+                                                        ))
+                                    except Exception as ex_ref:
+                                        logger.error(f"Erro ao plotar linhas de referência: {ex_ref}")
+                         
                         fig.update_layout(
                             yaxis=dict(
                                 title=f"Resultados ({unit})" if unit else "Resultados",
                                 showgrid=True,
-                                gridcolor='#2d313f'
+                                gridcolor='#2d313f' if tema_is_dark else '#e2e8f0'
                             ),
                             title="Evolução Temporal dos Indicadores Selecionados"
                         )
-
+ 
                     # Coletar datas reais de exames e formatar rótulos em duas linhas com mês abreviado em português (ex: 19-Fev)
                     datas_reais = sorted(df_plot['Data Formatada'].dropna().unique())
                     tick_vals = [d for d in datas_reais]
-                    
+                     
                     meses_pt = {
                         1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
                         7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez"
                     }
-                    
+                     
                     tick_text = []
                     for d in datas_reais:
                         dt = pd.to_datetime(d)
@@ -856,30 +1014,30 @@ else:
                         mes = meses_pt.get(dt.month, "")
                         ano = dt.strftime("%Y")
                         tick_text.append(f"{dia}-{mes}<br>{ano}")
-
+ 
                     fig.update_layout(
-                        template="plotly_dark",
+                        template="plotly_dark" if tema_is_dark else "plotly_white",
                         plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)",
                         height=435,  # Altura aprovada pelo usuario
                         margin=dict(t=80, b=20, l=10, r=10),  # Margens aprovadas pelo usuario
                         xaxis=dict(
-                            title="Data do Exame",
+                            title=f"Data do Exame<br>Paciente: {selected_paciente}",
                             tickmode="array",
                             tickvals=tick_vals,
                             ticktext=tick_text,
                             showgrid=True,
-                            gridcolor='#2d313f',
+                            gridcolor='#2d313f' if tema_is_dark else '#e2e8f0',
                             showspikes=False  # Desativa qualquer linha guia vertical ao apontar o cursor
                         ),
                         hoverlabel=dict(
-                            bgcolor="#161920",
+                            bgcolor="#161920" if tema_is_dark else "#ffffff",
                             font_size=11,  # Diminui o tamanho da fonte
                             font_family="Outfit, Inter, sans-serif",
-                            bordercolor="#2d3748"
+                            bordercolor="#2d3748" if tema_is_dark else "#cbd5e1"
                         ),
                         hovermode="closest",  # Foca no ponto mais próximo individualmente, deixando o box pequeno
-                        font=dict(family="Outfit, sans-serif"),
+                        font=dict(family="Outfit, sans-serif", color="#ffffff" if tema_is_dark else "#1e293b"),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
                     plotly_config = {
@@ -945,14 +1103,14 @@ else:
                         }
                     }
                     with pd_st.container(key="container_do_grafico"):
-                        pd_st.plotly_chart(fig, use_container_width=True, config=plotly_config)
+                        pd_st.plotly_chart(fig, width="stretch", config=plotly_config, key="plotly_static")
+
 
         with col2:
             pd_st.subheader("📋 Resumo do Filtro Atual")
             if not df_filtered.empty:
                 pd_st.markdown(f"**Paciente:** {df_filtered['Paciente'].iloc[0]}")
                 
-                # Encontra a data de coleta mais recente com base no campo ordenável Data Formatada
                 if 'Data Formatada' in df_filtered.columns and not df_filtered['Data Formatada'].isna().all():
                     idx_max = df_filtered['Data Formatada'].idxmax()
                     last_coleta = df_filtered.loc[idx_max, 'Data Exame']
@@ -960,12 +1118,61 @@ else:
                     last_coleta = df_filtered['Data Exame'].max()
                 pd_st.markdown(f"**Última Coleta:** {last_coleta}")
                 
+                # Carrega referências dinâmicas se existirem
+                ref_dict = {}
+                ref_csv_path = "data/exames/exame_references.csv"
+                
+                # Coleta dados clínicos do paciente logado para carregar o VR correto
+                p_sex = user_data.get("sexo", "Ambos")
+                p_birth = user_data.get("data_nascimento")
+                p_age = None
+                p_faixa = "Ambos"
+                p_preg = user_data.get("gravidez", False)
+                
+                if p_birth and last_coleta:
+                    try:
+                        birth_d = datetime.strptime(p_birth, "%d/%m/%d%y" if len(p_birth.split('/')[-1]) == 2 else "%d/%m/%Y")
+                        exam_d = datetime.strptime(last_coleta, "%d/%m/%Y")
+                        p_age = exam_d.year - birth_d.year - ((exam_d.month, exam_d.day) < (birth_d.month, birth_d.day))
+                        p_faixa = "Adulto" if p_age > 20 else "Infantil"
+                    except Exception:
+                        pass
+                
+                if os.path.exists(ref_csv_path):
+                    try:
+                        import csv
+                        with open(ref_csv_path, 'r', encoding='utf-8') as ref_f:
+                            ref_reader = csv.reader(ref_f)
+                            next(ref_reader, None)  # Pula header
+                            for ref_row in ref_reader:
+                                if len(ref_row) >= 8:
+                                    exam_name, uni, ref_c, ref_p, r_sex, r_faixa, r_preg, _ = ref_row
+                                    
+                                    # Valida compatibilidade clínica
+                                    if r_sex != "Ambos" and r_sex.upper() != p_sex.upper():
+                                        continue
+                                    if r_faixa != "Ambos" and r_faixa.upper() != p_faixa.upper():
+                                        continue
+                                    if r_preg.upper() != str(p_preg).upper():
+                                        continue
+                                        
+                                    ref_dict[exam_name] = (ref_c, ref_p)
+                    except Exception as e:
+                        logger.error(f"Erro ao carregar referências do CSV: {e}")
+
                 # Mostrar os últimos valores de forma resumida em cards
                 last_values = df_filtered.sort_values(by='Data Formatada').groupby('Exame/Componente').last().reset_index()
                 cards_html = []
                 for _, row in last_values.iterrows():
                     val_uni = f"{row['Resultado']} {row['Unidade'] if pd.notna(row['Unidade']) else ''}"
                     cor_exame = cor_map.get(row['Exame/Componente'], "#0284c7")
+                    
+                    # Tenta obter a referência específica do paciente ou a completa
+                    ref_text = "N/A"
+                    if row['Exame/Componente'] in ref_dict:
+                        ref_completa, ref_paciente = ref_dict[row['Exame/Componente']]
+                        ref_text = ref_paciente if ref_paciente else ref_completa
+                        
                     cards_html.append(
                         f'<div class="metric-card" style="border-left: 4px solid {cor_exame};">'
                         f'<strong style="font-size: 0.95em; display: inline-block; color: {cor_exame};">{row["Exame/Componente"]}</strong><br/>'
@@ -985,8 +1192,17 @@ else:
         with pd_st.container(key="container_da_tabela"):
             pd_st.subheader("🔎 Detalhes dos Dados")
             if not df_filtered.empty:
-                # Exibe colunas relevantes e limpas
+                # Se carregamos o dicionário de referências, podemos atualizar a coluna 'Referência' na tabela final com a do paciente
+                df_table = df_filtered.copy()
+                if ref_dict:
+                    def get_specific_ref(row_exam, original_ref):
+                        if row_exam in ref_dict:
+                            comp, pac = ref_dict[row_exam]
+                            return pac if pac else comp
+                        return original_ref
+                    df_table['Referência'] = df_table.apply(lambda r: get_specific_ref(r['Exame/Componente'], r['Referência']), axis=1)
+
                 display_cols = ["Data Exame", "Exame/Componente", "Resultado", "Unidade", "Referência", "Médico", "Laboratório"]
-                pd_st.dataframe(df_filtered[display_cols].reset_index(drop=True), width="stretch")
+                pd_st.dataframe(df_table[display_cols].reset_index(drop=True), width="stretch")
             else:
                 pd_st.write("Selecione algum filtro na barra lateral.")
