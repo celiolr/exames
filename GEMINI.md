@@ -19,9 +19,11 @@ O projeto é um pipeline estruturado e automatizado de extração e visualizaç�
 * **[`crawler.py`](app/crawler.py):** Efetua login e baixa PDFs usando o motor dinâmico **[D4vinci/Scrapling](https://github.com/D4vinci/Scrapling)**.
 * **[`pdf_processor.py`](app/pdf_processor.py):** Converte incrementalmente PDFs brutos para Markdown (`.md`).
 * **[`data_extractor.py`](app/data_extractor.py):** Parseia os markdowns e salva em arquivos CSV individuais por paciente (`results-*.csv`).
+* **[`data_extractor_reference.py`](app/data_extractor_reference.py):** Extrai unidades e valores de referência (VR) do exame mais recente aplicando metadados do paciente (`config.ini`).
 * **[`auditoria.py`](app/auditoria.py):** Abre os PDFs brutos originais (via `pdfplumber`), confronta as amostras e exporta relatórios de qualidade em `data/exames/auditoria/`. Auditoria configurada para **100% dos registros** (`AUDIT_SAMPLE_PERCENTAGE = 1.0`).
+* **[`auditoria_reference.py`](app/auditoria_reference.py):** Faz validação cruzada alfanumérica contínua das referências extraídas confrontando diretamente com o PDF original.
 * **[`logger.py`](app/logger.py):** Logger centralizado com `loguru` — saída colorida no console + arquivo rotativo em `_temp/pipeline.log`. Mede tempo de cada etapa do pipeline.
-* **[`dashboard.py`](app/dashboard.py):** Interface Dark Mode Streamlit com gráficos Plotly de eixo duplo, cartões de resumo, tela de login (RBAC), presets clínicos e botão de atualização em lote. Pipeline de startup roda **uma única vez por processo** via `@st.cache_resource`.
+* **[`dashboard.py`](app/dashboard.py):** Interface Dark Mode Streamlit com gráficos Plotly de eixo duplo, cartões de resumo integrados com referências do paciente, tela de login (RBAC), presets clínicos e botão de atualização em lote. Pipeline de startup roda **uma única vez por processo** via `@st.cache_resource`.
 
 ---
 
@@ -80,8 +82,51 @@ O projeto é um pipeline estruturado e automatizado de extração e visualizaç�
 
 ---
 
+## 📈 Sprint 9 — 100% Concluída ✅
+
+1. **Extração e Auditoria de Referências Dinâmicas:**
+   - **Extrator (`data_extractor_reference.py`):** Mapeia apenas o PDF/Markdown mais recente e extrai os valores de referência (VR) e a unidade de cada exame.
+   - **Metadados Clínicos:** Lê `data_nascimento` e `sexo` do paciente a partir do `config.ini` e calcula a idade exata no dia do exame, selecionando no texto do VR apenas a regra (adulta/infantil, masculina/feminina) correspondente a ele em `Referencia_Paciente_Especifico`.
+   - **Auditoria (`auditoria_reference.py`):** Realiza comparação alfanumérica contínua (100% tolerante a quebras de diagramação do PDF original) validando as referências extraídas (100% de sucesso atingido na validação do laudo recente do Célio).
+   - **Suíte de Testes:** 4 testes unitários adicionados em `tests/test_references.py` e integrados à suíte global.
+2. **Exibição Dinâmica no Dashboard:**
+   - O dashboard Streamlit integra a etapa de referências no pipeline de startup e no botão de recarga da Sidebar.
+   - Os cards de resumo exibem a referência filtrada do paciente na terceira linha (ex: `Ref: 60 a 99 mg/dL`).
+   - A tabela detalhada exibe a referência adaptada ao perfil do paciente.
+
+---
+
 ## 📈 Próximas Ideias
 
-1. Alertas preditivos no dashboard para valores fora do intervalo de referência (highlight em vermelho/amarelo nos gráficos)
+1. Alertas preditivos no dashboard para valores fora do intervalo de referência (highlight em vermelho/amarelo nos gráficos e cards)
 2. Suporte a novos portais de laboratório além do Pretti
 3. Testes unitários de auditoria (`tests/test_auditoria.py`) para garantir regressão zero quando novos exames forem adicionados
+
+---
+
+## 📈 Sprint 10 — Em Andamento 🔄
+
+### Suporte a Tema Claro/Escuro Dinâmico no Dashboard
+
+1. **CSS Responsivo ao Tema Nativo do Streamlit:**
+   - Substituídas as cores fixas hardcoded (ex: `#0f1116`, `#161920`) por variáveis CSS nativas do Streamlit: `var(--background-color)`, `var(--text-color)`, `var(--secondary-background-color)`.
+   - Afeta: classe `.main`, `.stAppHeader`, `.stSidebar`, e seletores `h1, h2, h3`.
+   - Resultado: navbar e fundo agora respondem corretamente ao tema selecionado (claro/escuro) nas configurações nativas do Streamlit. ✅
+
+2. **Detecção Dinâmica de `tema_is_dark`:**
+   - Substituído o valor fixo `tema_is_dark = True` por lógica de detecção via `pd_st.config.get_option("theme.base")` com fallback para `pd_st.get_option("theme.base")`.
+   - Objetivo: alternar cores das linhas de referência no Plotly (amarelo no dark, vermelho no light) e cores de grid/hover do gráfico automaticamente.
+   - **⚠️ Pendente:** Quando o tema é o padrão do sistema (sem seção `[theme]` definida no `config.toml`), `get_option("theme.base")` retorna `None`, fazendo o fallback cair em `True` (dark). Isso causa a linha de referência permanecer amarela mesmo no tema claro.
+
+3. **Ordem dos Filtros na Sidebar:** ✅
+   - Filtro "Exame / Componente" reposicionado logo abaixo do filtro "Médico".
+
+4. **Linhas de Referência Dual-tema:** ✅ (código implementado, detecção pendente)
+   - Dark: `rgba(253, 224, 71, 0.85)` (amarelo)
+   - Light: `rgba(239, 68, 68, 0.85)` (vermelho)
+
+### ⚠️ Problema Conhecido — Detecção do Tema Padrão
+
+> `pd_st.config.get_option("theme.base")` retorna `None` quando nenhum tema está explicitamente definido no `config.toml` (o usuário usa o padrão do Streamlit ou alterna via UI sem salvar).
+>
+> **Possível fix:** Usar JavaScript injetado via `pd_st.components.v1.html` para ler `document.body.getAttribute('data-theme')` ou o valor de background do body e retornar via `st.query_params`. Alternativa: pedir ao usuário que defina `[theme]` com `base = "dark"` ou `base = "light"` no `.streamlit/config.toml`.
